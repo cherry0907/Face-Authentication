@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Security Report - Face Authentication App{% endblock %}
+
+{% block content %}
+<div class="security-report-container">
+    <div class="header-section">
+        <h1>🛡️ Security Report</h1>
+        <p>Review all login activities and security events for your account</p>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+
+    <div class="stats-overview">
+        <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-info">
+                <h3>Total Logins</h3>
+                <p>{{ login_history|length }}</p>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-info">
+                <h3>Successful Logins</h3>
+                <p>{{ login_history|selectattr("success")|list|length }}</p>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">❌</div>
+            <div class="stat-info">
+                <h3>Failed Attempts</h3>
+                <p>{{ login_history|rejectattr("success")|list|length }}</p>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">🎯</div>
+            <div class="stat-info">
+                <h3>Avg. Confidence</h3>
+                <p>
+                    {% set successful_logins = login_history|selectattr("success")|selectattr("face_confidence")|list %}
+                    {% if successful_logins %}
+                        {{ "%.1f"|format((successful_logins|sum(attribute='face_confidence')) / (successful_logins|length) * 100) }}%
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="login-history-section">
+        <h2>Login History</h2>
+        
+        {% if login_history %}
+        <div class="table-container">
+            <table class="login-table">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Status</th>
+                        <th>Face Confidence</th>
+                        <th>IP Address</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for login in login_history %}
+                    <tr class="{{ 'success' if login.success else 'failed' }}">
+                        <td>
+                            <div class="datetime">
+                                {{ login.login_time.strftime('%B %d, %Y') }}<br>
+                                <small>{{ login.login_time.strftime('%I:%M %p') }}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge {{ 'success' if login.success else 'failed' }}">
+                                {% if login.success %}
+                                    ✅ Success
+                                {% else %}
+                                    ❌ Failed
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            {% if login.face_confidence %}
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" style="width: {{ (login.face_confidence * 100)|round }}%"></div>
+                                    <span class="confidence-text">{{ "%.1f"|format(login.face_confidence * 100) }}%</span>
+                                </div>
+                            {% else %}
+                                <span class="no-data">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if login.ip_address %}
+                                <code>{{ login.ip_address }}</code>
+                            {% else %}
+                                <span class="no-data">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not login.success and login.failure_reason %}
+                                <span class="failure-reason">{{ login.failure_reason }}</span>
+                            {% elif login.user_agent %}
+                                <span class="user-agent" title="{{ login.user_agent }}">
+                                    {% if 'Chrome' in login.user_agent %}
+                                        🌐 Chrome
+                                    {% elif 'Firefox' in login.user_agent %}
+                                        🦊 Firefox
+                                    {% elif 'Safari' in login.user_agent %}
+                                        🧭 Safari
+                                    {% elif 'Edge' in login.user_agent %}
+                                        🔷 Edge
+                                    {% else %}
+                                        🌐 Browser
+                                    {% endif %}
+                                </span>
+                            {% else %}
+                                <span class="no-data">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📊</div>
+            <h3>No Login History</h3>
+            <p>Your login activities will appear here once you start using the application.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="security-tips">
+        <h3>🔒 Security Tips</h3>
+        <ul>
+            <li>Monitor your login history regularly for suspicious activities</li>
+            <li>If you notice any unfamiliar login attempts, consider updating your face data</li>
+            <li>Face confidence scores above 60% indicate strong matches</li>
+            <li>Contact support if you notice any unauthorized access attempts</li>
+        </ul>
+    </div>
+</div>
+
+<style>
+.security-report-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header-section {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.header-section h1 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 2.5rem;
+}
+
+.header-section p {
+    color: #666;
+    margin-bottom: 20px;
+    font-size: 1.1rem;
+}
+
+.stats-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 40px;
+}
+
+.stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.stat-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.stat-info h3 {
+    color: #333;
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-info p {
+    color: #6366f1;
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.login-history-section h2 {
+    color: #333;
+    margin-bottom: 20px;
+    font-size: 1.5rem;
+}
+
+.table-container {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.login-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.login-table th {
+    background: #6366f1;
+    color: white;
+    padding: 15px;
+    text-align: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+}
+
+.login-table td {
+    padding: 15px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.login-table tr:last-child td {
+    border-bottom: none;
+}
+
+.login-table tr.success {
+    background: rgba(34, 197, 94, 0.05);
+}
+
+.login-table tr.failed {
+    background: rgba(239, 68, 68, 0.05);
+}
+
+.datetime {
+    color: #333;
+    font-weight: 500;
+}
+
+.datetime small {
+    color: #666;
+    font-size: 0.8rem;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-badge.success {
+    background: rgba(34, 197, 94, 0.1);
+    color: #059669;
+}
+
+.status-badge.failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+.confidence-bar {
+    position: relative;
+    width: 80px;
+    height: 20px;
+    background: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.confidence-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #22c55e 100%);
+    transition: width 0.3s ease;
+}
+
+.confidence-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #333;
+    text-shadow: 0 0 3px white;
+}
+
+.no-data {
+    color: #9ca3af;
+    font-style: italic;
+    font-size: 0.9rem;
+}
+
+.failure-reason {
+    color: #dc2626;
+    font-size: 0.9rem;
+    background: rgba(239, 68, 68, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.user-agent {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+}
+
+.empty-state h3 {
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.empty-state p {
+    color: #666;
+}
+
+.security-tips {
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 12px;
+    margin-top: 40px;
+}
+
+.security-tips h3 {
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.security-tips ul {
+    list-style: none;
+    padding: 0;
+}
+
+.security-tips li {
+    margin-bottom: 10px;
+    padding-left: 20px;
+    position: relative;
+    color: #666;
+}
+
+.security-tips li:before {
+    content: "💡";
+    position: absolute;
+    left: 0;
+}
+
+@media (max-width: 768px) {
+    .stats-overview {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    .login-table {
+        min-width: 600px;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Face Authentication App{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="welcome-section">
+        <div class="welcome-card">
+            <div class="profile-section">
+                {% if user.photo_path %}
+                <div class="profile-image">
+                    <img src="{{ url_for('static', filename=user.photo_path.replace('static/', '')) }}" alt="Profile Photo">
+                </div>
+                {% else %}
+                <div class="profile-image">
+                    <div class="avatar-placeholder">{{ user.name[0].upper() }}</div>
+                </div>
+                {% endif %}
+                <div class="profile-info">
+                    <h1 class="welcome-message">Welcome back, {{ user.name }}! 👋</h1>
+                    <p class="user-email">{{ user.email }}</p>
+                </div>
+            </div>
+            
+            <div class="stats-section">
+                <div class="stat-card">
+                    <div class="stat-icon">📅</div>
+                    <div class="stat-info">
+                        <h3>Account Created</h3>
+                        <p>{{ user.created_at.strftime('%B %d, %Y') }}</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon">🔐</div>
+                    <div class="stat-info">
+                        <h3>Last Login</h3>
+                        <p>
+                            {% if user.last_login_at %}
+                                {{ user.last_login_at.strftime('%B %d, %Y at %I:%M %p') }}
+                            {% else %}
+                                This is your first login!
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-info">
+                        <h3>Account Status</h3>
+                        <p class="status-verified">Verified</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="features-section">
+        <h2>Your Account Features</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <h3>Secure Authentication</h3>
+                <p>Your face is your password. No need to remember complex passwords.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Quick Access</h3>
+                <p>Login in seconds with just your email and face recognition.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <h3>Privacy Protected</h3>
+                <p>Your biometric data is encrypted and stored securely.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📧</div>
+                <h3>Email Alerts</h3>
+                <p>Get notified of all login activities for added security.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="actions-section">
+        <h2>Quick Actions</h2>
+        <div class="actions-grid">
+            <a href="{{ url_for('account_settings') }}" class="action-btn">
+                <span class="action-icon">⚙️</span>
+                <span>Account Settings</span>
+            </a>
+            
+            <button class="action-btn" onclick="showUpdateFaceModal()">
+                <span class="action-icon">🔄</span>
+                <span>Update Face Data</span>
+            </button>
+            
+            <a href="{{ url_for('security_report') }}" class="action-btn">
+                <span class="action-icon">📊</span>
+                <span>Security Report</span>
+            </a>
+            
+            <a href="{{ url_for('logout') }}" class="action-btn logout-btn">
+                <span class="action-icon">🚪</span>
+                <span>Logout</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add entrance animation
+    const welcomeCard = document.querySelector('.welcome-card');
+    const featureCards = document.querySelectorAll('.feature-card');
+    const actionBtns = document.querySelectorAll('.action-btn');
+
+    // Animate welcome card
+    setTimeout(() => {
+        welcomeCard.classList.add('animate-in');
+    }, 100);
+
+    // Animate feature cards
+    featureCards.forEach((card, index) => {
+        setTimeout(() => {
+            card.classList.add('animate-in');
+        }, 200 + (index * 100));
+    });
+
+    // Animate action buttons
+    actionBtns.forEach((btn, index) => {
+        setTimeout(() => {
+            btn.classList.add('animate-in');
+        }, 600 + (index * 50));
+    });
+});
+
+function showUpdateFaceModal() {
+    // Redirect to account settings page where the modal functionality is implemented
+    window.location.href = "{{ url_for('account_settings') }}";
+}
+</script>
+{% endblock %}

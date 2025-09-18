@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Face Authentication App{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="container">
+                <h1 class="logo">🔐 FaceAuth</h1>
+                {% if session.user_id %}
+                <nav>
+                    <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                    <a href="{{ url_for('logout') }}" class="nav-link">Logout</a>
+                </nav>
+                {% endif %}
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="container">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="toast toast-{{ category }}" id="toast">
+                                <span class="toast-message">{{ message }}</span>
+                                <button class="toast-close" onclick="closeToast()">&times;</button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="container">
+                <!-- Footer content removed as requested -->
+            </div>
+        </footer>
+    </div>
+
+    <!-- OTP Modal -->
+    <div id="otpModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Verify Your Email</h2>
+                <span class="close" onclick="closeOtpModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>We've sent a 6-digit verification code to your email.</p>
+                <form id="otpForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" id="userId" name="user_id">
+                    <div class="form-group">
+                        <label for="otp">Enter OTP:</label>
+                        <input type="text" id="otp" name="otp" maxlength="6" pattern="[0-9]{6}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Verify</button>
+                </form>
+                <div id="otpMessage" class="message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

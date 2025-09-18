@@ -1,0 +1,744 @@
+{% extends "base.html" %}
+
+{% block title %}Account Settings - Face Authentication App{% endblock %}
+
+{% block content %}
+<div class="account-settings-container">
+    <div class="header-section">
+        <h1>⚙️ Account Settings</h1>
+        <p>Manage your account preferences and security settings</p>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+
+    <div class="settings-grid">
+        <!-- Profile Information -->
+        <div class="settings-card">
+            <div class="card-header">
+                <h2>👤 Profile Information</h2>
+                <p>Your basic account details</p>
+            </div>
+            <div class="card-content">
+                <div class="profile-display">
+                    {% if user.photo_path %}
+                    <div class="profile-image">
+                        <img src="{{ url_for('static', filename=user.photo_path.replace('static/', '')) }}" alt="Profile Photo">
+                    </div>
+                    {% else %}
+                    <div class="profile-image">
+                        <div class="avatar-placeholder">{{ user.name[0].upper() }}</div>
+                    </div>
+                    {% endif %}
+                    <div class="profile-details">
+                        <h3>{{ user.name }}</h3>
+                        <p>{{ user.email }}</p>
+                        <p class="join-date">Member since {{ user.created_at.strftime('%B %Y') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Face Recognition Settings -->
+        <div class="settings-card">
+            <div class="card-header">
+                <h2>🔍 Face Recognition</h2>
+                <p>Manage your biometric authentication</p>
+            </div>
+            <div class="card-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h4>Face Data Status</h4>
+                        <p>Your face data is {{ 'active' if user.embedding else 'not configured' }}</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="showUpdateFaceModal()">
+                        Update Face Data
+                    </button>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h4>Last Updated</h4>
+                        <p>{{ user.created_at.strftime('%B %d, %Y') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Settings -->
+        <div class="settings-card">
+            <div class="card-header">
+                <h2>🛡️ Security</h2>
+                <p>Account security and access management</p>
+            </div>
+            <div class="card-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h4>Login History</h4>
+                        <p>View all account access activities</p>
+                    </div>
+                    <a href="{{ url_for('security_report') }}" class="btn btn-secondary">
+                        View Report
+                    </a>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h4>Account Verification</h4>
+                        <p>Status: <span class="status-verified">✅ Verified</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="settings-card danger-zone">
+            <div class="card-header">
+                <h2>⚠️ Danger Zone</h2>
+                <p>Irreversible account actions</p>
+            </div>
+            <div class="card-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <h4>Delete Account</h4>
+                        <p>Permanently delete your account and all associated data</p>
+                    </div>
+                    <button class="btn btn-danger" onclick="showDeleteAccountModal()">
+                        Delete Account
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Update Face Data Modal -->
+<div id="updateFaceModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>🔄 Update Face Data</h2>
+            <span class="close" onclick="closeUpdateFaceModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p>To update your face data, we need to verify your identity first.</p>
+            
+            <form id="updateFaceForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="step" id="step1">
+                    <h3>Step 1: Capture New Face Data</h3>
+                    <div class="face-capture-section">
+                        <div id="updateCameraContainer" class="camera-container">
+                            <video id="updateVideo" autoplay muted playsinline></video>
+                            <canvas id="updateCanvas" style="display: none;"></canvas>
+                        </div>
+                        <div class="camera-controls">
+                            <button type="button" id="updateStartCamera" class="btn btn-primary">Start Camera</button>
+                            <button type="button" id="updateCapturePhoto" class="btn btn-success" style="display: none;">Capture Photo</button>
+                            <button type="button" id="updateRetakePhoto" class="btn btn-secondary" style="display: none;">Retake</button>
+                        </div>
+                        <div id="updatePreviewContainer" style="display: none;">
+                            <img id="updatePhotoPreview" alt="Captured photo">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="step" id="step2" style="display: none;">
+                    <h3>Step 2: Verify with OTP</h3>
+                    <p>We've sent a verification code to your email: <strong>{{ user.email }}</strong></p>
+                    <div class="form-group">
+                        <label for="updateOtp">Enter OTP:</label>
+                        <input type="text" id="updateOtp" name="otp" maxlength="6" pattern="[0-9]{6}" required>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" id="updateNextStep" class="btn btn-primary" onclick="proceedUpdateFace()" disabled>Next</button>
+                    <button type="submit" id="updateSubmit" class="btn btn-success" style="display: none;">Update Face Data</button>
+                </div>
+            </form>
+            <div id="updateMessage" class="message"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div id="deleteAccountModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>⚠️ Delete Account</h2>
+            <span class="close" onclick="closeDeleteAccountModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="warning-message">
+                <p><strong>This action cannot be undone!</strong></p>
+                <p>Deleting your account will permanently remove:</p>
+                <ul>
+                    <li>Your profile and face data</li>
+                    <li>All login history</li>
+                    <li>All associated data</li>
+                </ul>
+            </div>
+            
+            <form id="deleteAccountForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="confirmation-input">
+                    <label for="deleteConfirmation">Type "DELETE" to confirm:</label>
+                    <input type="text" id="deleteConfirmation" name="confirmation" required>
+                </div>
+                
+                <p>We'll send a verification code to your email for final confirmation.</p>
+                
+                <button type="submit" class="btn btn-danger" disabled id="deleteAccountBtn">
+                    Send Deletion Code
+                </button>
+            </form>
+            <div id="deleteMessage" class="message"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete OTP Modal -->
+<div id="deleteOtpModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>🔐 Confirm Account Deletion</h2>
+            <span class="close" onclick="closeDeleteOtpModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p>Enter the verification code sent to your email to complete account deletion.</p>
+            
+            <form id="deleteOtpForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="form-group">
+                    <label for="deleteOtp">Enter OTP:</label>
+                    <input type="text" id="deleteOtp" name="otp" maxlength="6" pattern="[0-9]{6}" required>
+                </div>
+                <button type="submit" class="btn btn-danger">Delete Account Permanently</button>
+            </form>
+            <div id="deleteOtpMessage" class="message"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.account-settings-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header-section {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.header-section h1 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 2.5rem;
+}
+
+.header-section p {
+    color: #666;
+    margin-bottom: 20px;
+    font-size: 1.1rem;
+}
+
+.settings-grid {
+    display: grid;
+    gap: 24px;
+}
+
+.settings-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.danger-zone {
+    border: 2px solid #fef2f2;
+    background: #fef2f2;
+}
+
+.card-header {
+    padding: 24px 24px 0;
+}
+
+.card-header h2 {
+    color: #333;
+    margin-bottom: 8px;
+    font-size: 1.3rem;
+}
+
+.card-header p {
+    color: #666;
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.danger-zone .card-header h2 {
+    color: #dc2626;
+}
+
+.card-content {
+    padding: 24px;
+}
+
+.profile-display {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.profile-image {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.profile-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.profile-details h3 {
+    color: #333;
+    margin-bottom: 4px;
+    font-size: 1.2rem;
+}
+
+.profile-details p {
+    color: #666;
+    margin: 2px 0;
+}
+
+.join-date {
+    color: #9ca3af !important;
+    font-size: 0.9rem;
+}
+
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.setting-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.setting-item:first-child {
+    padding-top: 0;
+}
+
+.setting-info h4 {
+    color: #333;
+    margin-bottom: 4px;
+    font-size: 1rem;
+}
+
+.setting-info p {
+    color: #666;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.status-verified {
+    color: #059669;
+    font-weight: 600;
+}
+
+.step {
+    margin-bottom: 24px;
+}
+
+.step h3 {
+    color: #333;
+    margin-bottom: 16px;
+    font-size: 1.1rem;
+}
+
+.face-capture-section {
+    text-align: center;
+}
+
+.camera-container {
+    width: 320px;
+    height: 240px;
+    margin: 0 auto 16px;
+    border: 2px dashed #e5e7eb;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f9fafb;
+}
+
+.camera-container video {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    object-fit: cover;
+}
+
+.camera-controls {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+#updatePreviewContainer img {
+    max-width: 320px;
+    max-height: 240px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.warning-message {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.warning-message p {
+    color: #dc2626;
+    margin-bottom: 8px;
+}
+
+.warning-message ul {
+    color: #dc2626;
+    margin: 8px 0 0 20px;
+}
+
+.confirmation-input {
+    margin-bottom: 20px;
+}
+
+.confirmation-input label {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+    font-weight: 500;
+}
+
+.confirmation-input input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.confirmation-input input:focus {
+    outline: none;
+    border-color: #dc2626;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+    .profile-display {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .setting-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .camera-container {
+        width: 280px;
+        height: 210px;
+    }
+    
+    .camera-controls {
+        flex-direction: column;
+    }
+    
+    .modal-actions {
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Update Face Data Modal
+function showUpdateFaceModal() {
+    document.getElementById('updateFaceModal').style.display = 'block';
+}
+
+function closeUpdateFaceModal() {
+    document.getElementById('updateFaceModal').style.display = 'none';
+    stopUpdateCamera();
+    resetUpdateFaceForm();
+}
+
+function resetUpdateFaceForm() {
+    document.getElementById('step1').style.display = 'block';
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('updateNextStep').style.display = 'inline-block';
+    document.getElementById('updateSubmit').style.display = 'none';
+    document.getElementById('updateNextStep').disabled = true;
+    
+    // Reset camera controls
+    document.getElementById('updateStartCamera').style.display = 'inline-block';
+    document.getElementById('updateCapturePhoto').style.display = 'none';
+    document.getElementById('updateRetakePhoto').style.display = 'none';
+    document.getElementById('updatePreviewContainer').style.display = 'none';
+}
+
+// Delete Account Modal
+function showDeleteAccountModal() {
+    document.getElementById('deleteAccountModal').style.display = 'block';
+}
+
+function closeDeleteAccountModal() {
+    document.getElementById('deleteAccountModal').style.display = 'none';
+    document.getElementById('deleteAccountForm').reset();
+    document.getElementById('deleteAccountBtn').disabled = true;
+}
+
+function closeDeleteOtpModal() {
+    document.getElementById('deleteOtpModal').style.display = 'none';
+}
+
+// Delete confirmation validation
+document.getElementById('deleteConfirmation').addEventListener('input', function() {
+    const btn = document.getElementById('deleteAccountBtn');
+    btn.disabled = this.value !== 'DELETE';
+});
+
+// Camera functionality for face update
+let updateStream = null;
+
+async function startUpdateCamera() {
+    try {
+        updateStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'user' },
+            audio: false 
+        });
+        
+        const video = document.getElementById('updateVideo');
+        video.srcObject = updateStream;
+        
+        document.getElementById('updateStartCamera').style.display = 'none';
+        document.getElementById('updateCapturePhoto').style.display = 'inline-block';
+        
+    } catch (error) {
+        showToast('error', 'Camera access denied. Please allow camera permissions.');
+    }
+}
+
+function captureUpdatePhoto() {
+    const video = document.getElementById('updateVideo');
+    const canvas = document.getElementById('updateCanvas');
+    const preview = document.getElementById('updatePhotoPreview');
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    
+    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    preview.src = imageData;
+    
+    document.getElementById('updatePreviewContainer').style.display = 'block';
+    document.getElementById('updateCapturePhoto').style.display = 'none';
+    document.getElementById('updateRetakePhoto').style.display = 'inline-block';
+    document.getElementById('updateNextStep').disabled = false;
+    
+    stopUpdateCamera();
+}
+
+function retakeUpdatePhoto() {
+    document.getElementById('updatePreviewContainer').style.display = 'none';
+    document.getElementById('updateRetakePhoto').style.display = 'none';
+    document.getElementById('updateNextStep').disabled = true;
+    startUpdateCamera();
+}
+
+function stopUpdateCamera() {
+    if (updateStream) {
+        updateStream.getTracks().forEach(track => track.stop());
+        updateStream = null;
+    }
+}
+
+async function proceedUpdateFace() {
+    // Send captured face data and request OTP
+    const canvas = document.getElementById('updateCanvas');
+    const faceData = canvas.toDataURL('image/jpeg', 0.8);
+    
+    try {
+        const response = await fetch('/update-face-request', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                face_image: faceData,
+                csrf_token: document.querySelector('input[name="csrf_token"]').value
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('step1').style.display = 'none';
+            document.getElementById('step2').style.display = 'block';
+            document.getElementById('updateNextStep').style.display = 'none';
+            document.getElementById('updateSubmit').style.display = 'inline-block';
+            showToast('success', 'Verification code sent to your email');
+        } else {
+            showToast('error', result.message);
+        }
+    } catch (error) {
+        showToast('error', 'Failed to process request');
+    }
+}
+
+// Event listeners
+document.getElementById('updateStartCamera').addEventListener('click', startUpdateCamera);
+document.getElementById('updateCapturePhoto').addEventListener('click', captureUpdatePhoto);
+document.getElementById('updateRetakePhoto').addEventListener('click', retakeUpdatePhoto);
+
+// Form submissions
+document.getElementById('updateFaceForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const otp = document.getElementById('updateOtp').value;
+    
+    try {
+        const response = await fetch('/update-face-confirm', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                otp: otp,
+                csrf_token: document.querySelector('input[name="csrf_token"]').value
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('success', 'Face data updated successfully!');
+            closeUpdateFaceModal();
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast('error', result.message);
+        }
+    } catch (error) {
+        showToast('error', 'Failed to update face data');
+    }
+});
+
+document.getElementById('deleteAccountForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    try {
+        const response = await fetch('/delete-account-request', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                csrf_token: document.querySelector('input[name="csrf_token"]').value
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            closeDeleteAccountModal();
+            document.getElementById('deleteOtpModal').style.display = 'block';
+            showToast('info', 'Deletion code sent to your email');
+        } else {
+            showToast('error', result.message);
+        }
+    } catch (error) {
+        showToast('error', 'Failed to process deletion request');
+    }
+});
+
+document.getElementById('deleteOtpForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const otp = document.getElementById('deleteOtp').value;
+    
+    try {
+        const response = await fetch('/delete-account-confirm', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                otp: otp,
+                csrf_token: document.querySelector('input[name="csrf_token"]').value
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('success', 'Account deleted successfully');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        } else {
+            showToast('error', result.message);
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete account');
+    }
+});
+
+// Close modals when clicking outside
+window.addEventListener('click', function(e) {
+    const updateModal = document.getElementById('updateFaceModal');
+    const deleteModal = document.getElementById('deleteAccountModal');
+    const deleteOtpModal = document.getElementById('deleteOtpModal');
+    
+    if (e.target === updateModal) closeUpdateFaceModal();
+    if (e.target === deleteModal) closeDeleteAccountModal();
+    if (e.target === deleteOtpModal) closeDeleteOtpModal();
+});
+</script>
+{% endblock %}

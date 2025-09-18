@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - Face Authentication App{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h2>Welcome Back</h2>
+            <p>Sign in using your email and face</p>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+
+            <div class="face-capture-section">
+                <h3>📸 Face Authentication</h3>
+                <p>Look at the camera to authenticate</p>
+                
+                <div class="camera-container">
+                    <video id="video" autoplay muted></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                    <div id="capturedImage" style="display: none;">
+                        <img id="facePreview" src="" alt="Captured face">
+                        <button type="button" id="retakeBtn" class="btn btn-secondary">Retake Photo</button>
+                    </div>
+                </div>
+
+                <div class="camera-controls">
+                    <button type="button" id="startCameraBtn" class="btn btn-secondary">Start Camera</button>
+                    <button type="button" id="captureBtn" class="btn btn-primary" style="display: none;">Capture Face</button>
+                </div>
+            </div>
+
+            <input type="hidden" id="faceImageData" name="face_image" required>
+
+            <button type="submit" id="submitBtn" class="btn btn-primary" disabled>
+                <span class="btn-text">Sign In</span>
+                <span class="btn-loading" style="display: none;">Authenticating...</span>
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Don't have an account? <a href="{{ url_for('signup') }}">Sign Up</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = document.querySelector('.btn-text');
+    const btnLoading = document.querySelector('.btn-loading');
+
+    loginForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const faceImageData = document.getElementById('faceImageData').value;
+        if (!faceImageData) {
+            showToast('error', 'Please capture your face photo');
+            return;
+        }
+
+        // Show loading state
+        submitBtn.disabled = true;
+        btnText.style.display = 'none';
+        btnLoading.style.display = 'inline';
+
+        try {
+            const formData = new FormData(loginForm);
+            
+            const response = await fetch('/login', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showToast('success', 'Login successful! Redirecting...');
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 1500);
+            } else {
+                showToast('error', result.message);
+            }
+        } catch (error) {
+            showToast('error', 'Network error. Please try again.');
+        } finally {
+            // Reset button state
+            submitBtn.disabled = false;
+            btnText.style.display = 'inline';
+            btnLoading.style.display = 'none';
+        }
+    });
+
+    // Enable submit button when face is captured
+    function checkFormValidity() {
+        const faceImageData = document.getElementById('faceImageData').value;
+        const email = document.getElementById('email').value;
+
+        submitBtn.disabled = !(faceImageData && email);
+    }
+
+    // Add event listeners to form fields
+    document.querySelectorAll('#loginForm input').forEach(input => {
+        input.addEventListener('input', checkFormValidity);
+    });
+
+    // Listen for face capture
+    document.addEventListener('faceCaptured', checkFormValidity);
+});
+</script>
+{% endblock %}

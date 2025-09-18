@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Error {{ error_code }} - Face Authentication App{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card" style="text-align: center;">
+        <div class="auth-header">
+            <h2>Oops! Error {{ error_code }}</h2>
+            <p>{{ error_message }}</p>
+        </div>
+        
+        <div style="font-size: 4rem; margin: 2rem 0;">
+            {% if error_code == 404 %}
+                🔍
+            {% else %}
+                ⚠️
+            {% endif %}
+        </div>
+        
+        <div class="auth-footer">
+            <a href="{{ url_for('index') }}" class="btn btn-primary">Go Home</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
