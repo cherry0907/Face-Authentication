@@ -246,6 +246,109 @@ class EmailService:
         
         return self.send_email(to_email, subject, html_content, text_content)
     
+    def send_login_otp_email(self, to_email, name, otp):
+        """Send login OTP verification email"""
+        subject = "Login Verification Code - Face Authentication App"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    margin: 0;
+                    padding: 20px;
+                    background-color: #f5f5f5;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background-color: white;
+                    padding: 30px;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }}
+                .header {{
+                    text-align: center;
+                    color: #333;
+                    margin-bottom: 20px;
+                }}
+                .otp-code {{
+                    background-color: #007bff;
+                    color: white;
+                    font-size: 24px;
+                    font-weight: bold;
+                    padding: 15px;
+                    text-align: center;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                    letter-spacing: 3px;
+                }}
+                .info {{
+                    background-color: #d1ecf1;
+                    border: 1px solid #bee5eb;
+                    color: #0c5460;
+                    padding: 10px;
+                    border-radius: 5px;
+                    margin: 15px 0;
+                }}
+                .footer {{
+                    text-align: center;
+                    color: #666;
+                    font-size: 12px;
+                    margin-top: 30px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔐 Login Verification</h1>
+                    <h2>Hello, {name}!</h2>
+                </div>
+                
+                <p>Someone is trying to log into your Face Authentication account.</p>
+                <p>Your face has been verified. Please use the following code to complete your login:</p>
+                
+                <div class="otp-code">{otp}</div>
+                
+                <div class="info">
+                    ℹ️ <strong>Security Notice:</strong> This verification code will expire in 10 minutes.
+                    Never share this code with anyone.
+                </div>
+                
+                <p>If this wasn't you, please ignore this email and consider changing your password.</p>
+                
+                <div class="footer">
+                    <p>Face Authentication App &copy; 2025</p>
+                    <p>This is an automated security message, please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_content = f"""
+        Login Verification Code - Face Authentication App
+        
+        Hello, {name}!
+        
+        Someone is trying to log into your Face Authentication account.
+        Your face has been verified. Please use the following code to complete your login:
+        
+        OTP: {otp}
+        
+        Security Notice: This verification code will expire in 10 minutes.
+        Never share this code with anyone.
+        
+        If this wasn't you, please ignore this email and consider changing your password.
+        
+        Face Authentication App © 2025
+        """
+        
+        return self.send_email(to_email, subject, html_content, text_content)
+    
     def send_deletion_otp_email(self, to_email, name, otp):
         """Send account deletion OTP email"""
         subject = "Account Deletion Verification - Face Authentication App"

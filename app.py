@@ -37,6 +37,52 @@ def create_tables():
     with app.app_context():
         db.create_all()
 
+def cleanup_expired_accounts():
+    """Clean up expired unverified accounts"""
+    try:
+        with app.app_context():
+            # Find expired unverified accounts (older than 1 hour)
+            expired_threshold = datetime.utcnow() - timedelta(hours=1)
+            expired_users = User.query.filter(
+                User.is_verified == False,
+                User.created_at < expired_threshold
+            ).all()
+            
+            for user in expired_users:
+                # Delete associated files
+                if user.photo_path and os.path.exists(user.photo_path):
+                    try:
+                        os.remove(user.photo_path)
+                    except Exception:
+                        pass  # Continue even if file deletion fails
+                
+                db.session.delete(user)
+            
+            if expired_users:
+                db.session.commit()
+                print(f"Cleaned up {len(expired_users)} expired unverified accounts")
+            
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+# Schedule cleanup to run every hour (you can run this as a background task)
+import threading
+import time
+
+def periodic_cleanup():
+    """Run cleanup periodically"""
+    while True:
+        time.sleep(3600)  # Wait 1 hour
+        cleanup_expired_accounts()
+
+# Start cleanup thread
+cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
+cleanup_thread.start()
+
 @app.route('/')
 def index():
     """Home page - redirect based on login status"""
@@ -85,6 +131,25 @@ def signup():
                 'message': 'Password must be at least 8 characters long'
             })
         
+        # Check if email already exists (including unverified accounts)
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            if existing_user.is_verified:
+                return jsonify({
+                    'success': False,
+                    'message': 'Email already registered with a verified account'
+                })
+            else:
+                # Delete the existing unverified account to allow re-registration
+                if existing_user.photo_path and os.path.exists(existing_user.photo_path):
+                    try:
+                        os.remove(existing_user.photo_path)
+                    except:
+                        pass  # Continue even if file deletion fails
+                
+                db.session.delete(existing_user)
+                db.session.commit()
+        
         # Register user
         success, result = auth_service.register_user(name, email, password, face_image)
         
@@ -99,6 +164,13 @@ def signup():
                 # If email fails, delete the user and return error
                 user = User.query.get(user_id)
                 if user:
+                    # Delete associated files
+                    if user.photo_path and os.path.exists(user.photo_path):
+                        try:
+                            os.remove(user.photo_path)
+                        except:
+                            pass  # Continue even if file deletion fails
+                    
                     db.session.delete(user)
                     db.session.commit()
                 
@@ -119,6 +191,7 @@ def signup():
             })
             
     except Exception as e:
+        db.session.rollback()
         return jsonify({
             'success': False,
             'message': f'Registration failed: {str(e)}'
@@ -193,7 +266,7 @@ def login():
                 'message': 'Email and face image are required'
             })
         
-        # Authenticate user
+        # Authenticate user (face verification only)
         ip_address = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR'))
         user_agent = request.environ.get('HTTP_USER_AGENT', '')
         success, result = auth_service.authenticate_user(email, face_image, ip_address, user_agent)
@@ -202,23 +275,36 @@ def login():
             user = result['user']
             similarity = result['similarity']
             
-            # Set session
-            session['user_id'] = user.id
-            session['user_email'] = user.email
-            session['user_name'] = user.name
+            # Generate login OTP
+            otp = auth_service.generate_otp()
+            otp_hash = auth_service.hash_otp(otp)
             
-            # Send login alert email
-            email_service.send_login_alert(
-                user.email, 
-                user.name, 
-                user.last_login_at,
-                similarity
-            )
+            # Store login OTP in session (temporary)
+            session['login_otp'] = otp_hash
+            session['login_user_id'] = user.id
+            session['login_similarity'] = similarity
+            session['login_otp_expires'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
             
-            return jsonify({
-                'success': True,
-                'message': 'Login successful!'
-            })
+            # Send login OTP email
+            email_success, email_message = email_service.send_login_otp_email(user.email, user.name, otp)
+            
+            if email_success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Face verified! Check your email for the login code.',
+                    'show_otp': True
+                })
+            else:
+                # Clear session data if email fails
+                session.pop('login_otp', None)
+                session.pop('login_user_id', None)
+                session.pop('login_similarity', None)
+                session.pop('login_otp_expires', None)
+                
+                return jsonify({
+                    'success': False,
+                    'message': f'Failed to send login code: {email_message}'
+                })
         else:
             return jsonify({
                 'success': False,
@@ -229,6 +315,100 @@ def login():
         return jsonify({
             'success': False,
             'message': f'Login failed: {str(e)}'
+        })
+
+@app.route('/verify-login-otp', methods=['POST'])
+def verify_login_otp():
+    """Verify login OTP and complete login"""
+    try:
+        # Validate CSRF token
+        try:
+            validate_csrf(request.form.get('csrf_token'))
+        except CSRFError:
+            return jsonify({
+                'success': False,
+                'message': 'Security token expired. Please refresh the page and try again.'
+            }), 400
+        
+        otp = request.form.get('otp', '').strip()
+        
+        if not otp or len(otp) != 6:
+            return jsonify({
+                'success': False,
+                'message': 'Valid 6-digit OTP is required'
+            })
+        
+        # Check session data
+        if 'login_otp' not in session or 'login_user_id' not in session:
+            return jsonify({
+                'success': False,
+                'message': 'Login session expired. Please try again.'
+            })
+        
+        # Check OTP expiry
+        expires_str = session.get('login_otp_expires')
+        if expires_str:
+            expires = datetime.fromisoformat(expires_str)
+            if datetime.utcnow() > expires:
+                # Clear session data
+                session.pop('login_otp', None)
+                session.pop('login_user_id', None)
+                session.pop('login_similarity', None)
+                session.pop('login_otp_expires', None)
+                return jsonify({
+                    'success': False,
+                    'message': 'OTP expired. Please try logging in again.'
+                })
+        
+        # Verify OTP
+        if not auth_service.verify_otp(otp, session['login_otp']):
+            return jsonify({
+                'success': False,
+                'message': 'Invalid OTP'
+            })
+        
+        # Get user and complete login
+        user = auth_service.get_user_by_id(session['login_user_id'])
+        if not user:
+            return jsonify({
+                'success': False,
+                'message': 'User not found'
+            })
+        
+        similarity = session.get('login_similarity', 0)
+        
+        # Set session
+        session['user_id'] = user.id
+        session['user_email'] = user.email
+        session['user_name'] = user.name
+        
+        # Update last login
+        user.update_last_login()
+        db.session.commit()
+        
+        # Send login alert email
+        email_service.send_login_alert(
+            user.email, 
+            user.name, 
+            user.last_login_at,
+            similarity
+        )
+        
+        # Clear login OTP session data
+        session.pop('login_otp', None)
+        session.pop('login_user_id', None)
+        session.pop('login_similarity', None)
+        session.pop('login_otp_expires', None)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Login successful!'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'OTP verification failed: {str(e)}'
         })
 
 @app.route('/security-report')
@@ -571,7 +751,29 @@ def csrf_error(error):
 # Custom template filters
 @app.template_filter('datetime')
 def datetime_filter(dt, format='%B %d, %Y at %I:%M %p'):
-    """Format datetime for templates"""
+    """Format datetime for templates with timezone conversion"""
+    if dt is None:
+        return 'Never'
+    
+    # Convert UTC to local time
+    import time
+    from datetime import timezone, timedelta
+    
+    # Get local timezone offset
+    local_offset = time.timezone if (time.daylight == 0) else time.altzone
+    local_tz = timezone(timedelta(seconds=-local_offset))
+    
+    # Convert UTC datetime to local timezone
+    if dt.tzinfo is None:
+        # Assume UTC if no timezone info
+        dt = dt.replace(tzinfo=timezone.utc)
+    
+    local_dt = dt.astimezone(local_tz)
+    return local_dt.strftime(format)
+
+@app.template_filter('datetime_utc')
+def datetime_utc_filter(dt, format='%B %d, %Y at %I:%M %p UTC'):
+    """Format datetime for templates keeping UTC"""
     if dt is None:
         return 'Never'
     return dt.strftime(format)
