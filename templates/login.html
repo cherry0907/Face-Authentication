@@ -10,6 +10,7 @@
             <p>Sign in using your email and face</p>
         </div>
 
+        <!-- Login Form -->
         <form id="loginForm" class="auth-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             
@@ -45,11 +46,69 @@
             </button>
         </form>
 
+        <!-- OTP Verification Form (hidden initially) -->
+        <form id="otpForm" class="auth-form" style="display: none;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="otp-section">
+                <h3>🔐 Enter Verification Code</h3>
+                <p>We've sent a 6-digit code to your email. Please enter it below:</p>
+                
+                <div class="form-group">
+                    <label for="otp">Verification Code</label>
+                    <input type="text" id="otp" name="otp" maxlength="6" pattern="[0-9]{6}" 
+                           placeholder="Enter 6-digit code" required autocomplete="one-time-code">
+                </div>
+                
+                <button type="submit" id="otpSubmitBtn" class="btn btn-primary">
+                    <span class="otp-btn-text">Verify & Login</span>
+                    <span class="otp-btn-loading" style="display: none;">Verifying...</span>
+                </button>
+                
+                <button type="button" id="backToLoginBtn" class="btn btn-secondary">Back to Login</button>
+            </div>
+        </form>
+
         <div class="auth-footer">
             <p>Don't have an account? <a href="{{ url_for('signup') }}">Sign Up</a></p>
         </div>
     </div>
 </div>
+
+<style>
+.otp-section {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.otp-section h3 {
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.otp-section p {
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.otp-section input[type="text"] {
+    text-align: center;
+    font-size: 18px;
+    letter-spacing: 3px;
+    font-weight: bold;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    margin-top: 10px;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -57,10 +116,16 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const loginForm = document.getElementById('loginForm');
+    const otpForm = document.getElementById('otpForm');
     const submitBtn = document.getElementById('submitBtn');
+    const otpSubmitBtn = document.getElementById('otpSubmitBtn');
+    const backToLoginBtn = document.getElementById('backToLoginBtn');
     const btnText = document.querySelector('.btn-text');
     const btnLoading = document.querySelector('.btn-loading');
+    const otpBtnText = document.querySelector('.otp-btn-text');
+    const otpBtnLoading = document.querySelector('.otp-btn-loading');
 
+    // Login form submission
     loginForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 
@@ -85,7 +150,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const result = await response.json();
 
-            if (result.success) {
+            if (result.success && result.show_otp) {
+                // Face verified, show OTP form
+                loginForm.style.display = 'none';
+                otpForm.style.display = 'block';
+                document.getElementById('otp').focus();
+                showToast('success', result.message);
+            } else if (result.success) {
+                // Direct login (shouldn't happen with new flow)
                 showToast('success', 'Login successful! Redirecting...');
                 setTimeout(() => {
                     window.location.href = '/dashboard';
@@ -103,6 +175,69 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // OTP form submission
+    otpForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const otp = document.getElementById('otp').value;
+        if (!otp || otp.length !== 6) {
+            showToast('error', 'Please enter a valid 6-digit code');
+            return;
+        }
+
+        // Show loading state
+        otpSubmitBtn.disabled = true;
+        otpBtnText.style.display = 'none';
+        otpBtnLoading.style.display = 'inline';
+
+        try {
+            const formData = new FormData(otpForm);
+            
+            const response = await fetch('/verify-login-otp', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                showToast('success', 'Login successful! Redirecting...');
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 1500);
+            } else {
+                showToast('error', result.message);
+                if (result.message.includes('expired') || result.message.includes('session')) {
+                    // Go back to login form if session expired
+                    setTimeout(() => {
+                        resetToLoginForm();
+                    }, 2000);
+                }
+            }
+        } catch (error) {
+            showToast('error', 'Network error. Please try again.');
+        } finally {
+            // Reset button state
+            otpSubmitBtn.disabled = false;
+            otpBtnText.style.display = 'inline';
+            otpBtnLoading.style.display = 'none';
+        }
+    });
+
+    // Back to login button
+    backToLoginBtn.addEventListener('click', function() {
+        resetToLoginForm();
+    });
+
+    function resetToLoginForm() {
+        otpForm.style.display = 'none';
+        loginForm.style.display = 'block';
+        document.getElementById('otp').value = '';
+        // Reset face capture if needed
+        document.getElementById('faceImageData').value = '';
+        checkFormValidity();
+    }
+
     // Enable submit button when face is captured
     function checkFormValidity() {
         const faceImageData = document.getElementById('faceImageData').value;
@@ -118,6 +253,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Listen for face capture
     document.addEventListener('faceCaptured', checkFormValidity);
+
+    // Auto-format OTP input
+    document.getElementById('otp').addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+        if (value.length > 6) {
+            value = value.slice(0, 6);
+        }
+        e.target.value = value;
+    });
 });
 </script>
 {% endblock %}

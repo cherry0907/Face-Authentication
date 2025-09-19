@@ -191,9 +191,7 @@ class AuthService:
                 self.log_login_attempt(
                     user.id, True, similarity, ip_address, user_agent
                 )
-                # Update last login
-                user.update_last_login()
-                db.session.commit()
+                # Don't update last login here - will be updated after OTP verification
                 return True, {"user": user, "similarity": similarity}
             else:
                 # Log failed attempt
